@@ -4,7 +4,7 @@ TP_LIST = [f"tp{i}" for i in range(1,17)]
 
 rule merge_featurecounts:
     input:
-        script="scripts/200325_merge_featureCounts_barcode.py",
+        script="scripts/merge_featureCounts_barcode.py",
         prev="featurecounts.done"
     output:
         temp("merge_featurecounts_{tp}.done"),
