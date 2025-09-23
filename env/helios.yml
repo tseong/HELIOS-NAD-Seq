@@ -1,0 +1,31 @@
+name: helios
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+dependencies:
+  - python=3.10
+  - cutadapt=4.4
+  - bowtie2=2.4.5
+  - trimmomatic=0.39
+  - subread
+  - samtools
+  - pysam
+  - regex
+  - matplotlib
+  - pandas
+  - numpy
+  - scipy                  # for z-score & other stats
+  - scikit-learn           # KMeans, z-scoring utilities
+  - tslearn                # dynamic time warping clustering
+  - gffutils
+  - biopython
+  - pip
+  - seqtk
+  - weblogo
+  - seaborn
+  - matplotlib-venn
+  - pip:
+      - pydeseq2==0.4.10
+      - venn
