@@ -1,0 +1,8 @@
+# Snakefile
+
+# Load any config you have
+configfile: "eColiHelios_2.yml"
+
+include: "rules/preprocessing.smk"
+include: "rules/alignment.smk"
+include: "rules/pydeseq2.smk"
