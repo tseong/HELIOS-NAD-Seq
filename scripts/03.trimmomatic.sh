@@ -10,13 +10,13 @@
 # Step 03: Trimmomatic paired-end trimming
 #
 # Usage:
-#   sbatch scripts/03_trimmomatic.sh <INPUT_DIR> [OUTPUT_DIR]
+#   sbatch scripts/03.trimmomatic.sh <INPUT_DIR> [OUTPUT_DIR]
 #
 # Example:
-#   sbatch scripts/03_trimmomatic.sh results/5prime_trimmed
+#   sbatch scripts/03.trimmomatic.sh results/5prime_trimmed
 #
 # Optional output directory:
-#   sbatch scripts/03_trimmomatic.sh \
+#   sbatch scripts/03.trimmomatic.sh \
 #       results/5prime_trimmed \
 #       results/trimmomatic
 #
