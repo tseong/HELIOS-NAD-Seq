@@ -10,13 +10,13 @@
 # Step 02: 5' trimming
 #
 # Usage:
-#   sbatch scripts/02_5prime_trim_slurm.sh <CUTADAPT_DIR> [OUTPUT_DIR]
+#   sbatch scripts/02.5prime_trim.sh <CUTADAPT_DIR> [OUTPUT_DIR]
 #
 # Example:
-#   sbatch scripts/02_5prime_trim_slurm.sh results/cutadapt
+#   sbatch scripts/02.5prime_trim.sh results/cutadapt
 #
 # Optional output directory:
-#   sbatch scripts/02_5prime_trim_slurm.sh \
+#   sbatch scripts/02.5prime_trim.sh \
 #       results/cutadapt \
 #       results/5prime_trimmed
 # ============================================================
@@ -56,13 +56,13 @@ echo "========================================"
 # Run 5' trimming
 if [ -n "$output_dir" ]; then
 
-    python scripts/02_5prime_trim.py \
+    python scripts/02.5prime_trim.py \
         "$input_dir" \
         "$output_dir"
 
 else
 
-    python scripts/02_5prime_trim.py \
+    python scripts/02.5prime_trim.py \
         "$input_dir"
 
 fi
