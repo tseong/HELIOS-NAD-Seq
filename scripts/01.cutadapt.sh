@@ -6,13 +6,13 @@
 
 # ============================================================
 # Usage:
-#   bash demultiplex_cutadapt.sh <FASTQ_DIR> [OUTPUT_DIR]
+#   bash 01.cutadapt.sh <FASTQ_DIR> [OUTPUT_DIR]
 #
 # Example:
-#   bash demultiplex_cutadapt.sh /path/to/fastq
+#   bash 01.cutadapt.sh /path/to/fastq
 #
 #   or:
-#   bash demultiplex_cutadapt.sh /path/to/fastq /path/to/cutadapt
+#   bash 01.cutadapt.sh /path/to/fastq /path/to/cutadapt
 #
 # If OUTPUT_DIR is not provided, a directory named "cutadapt"
 # will be created next to the FASTQ directory.
