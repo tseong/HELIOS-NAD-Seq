@@ -26,7 +26,9 @@ dependencies:
   - weblogo
   - seaborn
   - matplotlib-venn
+  - upsetplot
   - sra-tools
   - pip:
       - pydeseq2==0.4.10
       - venn
+      - gseapy
