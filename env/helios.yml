@@ -26,6 +26,7 @@ dependencies:
   - weblogo
   - seaborn
   - matplotlib-venn
+  - sra-tools
   - pip:
       - pydeseq2==0.4.10
       - venn
