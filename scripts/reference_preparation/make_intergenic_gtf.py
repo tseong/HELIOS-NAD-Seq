@@ -1,10 +1,46 @@
-```python
 #!/usr/bin/env python3
 
 import argparse
 import re
 from pathlib import Path
 from itertools import groupby
+
+
+# ============================================================
+# HELIOS NAD-Seq reference preparation
+#
+# Generate strand-aware extended gene features for
+# featureCounts.
+#
+# Expected workflow structure:
+#
+# tp_workflow/
+# ├── scripts/
+# │   └── reference_prep/
+# │       └── make_intergenic_gtf.py
+# │
+# └── gtf/
+#     ├── ncbi_dataset/
+#     │   └── data/
+#     │       └── GCF_000005845.2/
+#     │           └── genomic.gtf
+#     │
+#     └── GCF_000005845.2_genomic_intergenic.gtf
+#
+#
+# Usage:
+#
+#   python scripts/reference_prep/make_intergenic_gtf.py
+#
+#
+# Optional:
+#
+#   python scripts/reference_prep/make_intergenic_gtf.py \
+#       --input-gtf /path/to/input.gtf \
+#       --output-gtf /path/to/output.gtf \
+#       --extension 100
+#
+# ============================================================
 
 
 # ------------------------------------------------------------
@@ -18,6 +54,7 @@ def parse_attrs(attribute_string):
     """
     Parse a GTF attribute string into a dictionary.
     """
+
     return {
         key: value
         for key, value in ATTR_RE.findall(attribute_string)
@@ -25,16 +62,56 @@ def parse_attrs(attribute_string):
 
 
 # ------------------------------------------------------------
-# Read gene features from GTF
+# Find workflow root
+# ------------------------------------------------------------
+
+def find_workflow_root(script_path):
+    """
+    Search upward from the script location until a directory
+    containing 'gtf/' is found.
+
+    This allows the script to live at:
+
+        tp_workflow/scripts/reference_prep/
+
+    while correctly identifying:
+
+        tp_workflow/
+
+    as the workflow root.
+    """
+
+    current = script_path.resolve().parent
+
+    for candidate in [current, *current.parents]:
+
+        gtf_dir = candidate / "gtf"
+
+        if gtf_dir.is_dir():
+            return candidate
+
+    raise RuntimeError(
+        "Could not determine workflow root. "
+        "No parent directory containing 'gtf/' was found."
+    )
+
+
+# ------------------------------------------------------------
+# Read gene features
 # ------------------------------------------------------------
 
 def read_genes(gtf_path):
     """
     Read gene features from a GTF file.
 
-    Returns:
-        header_lines : list of GTF header/comment lines
-        genes        : list of gene records
+    Returns
+    -------
+    header_lines : list
+        Original GTF comment/header lines.
+
+    genes : list
+        Gene records containing chromosome, coordinates,
+        source, score, strand, frame and attributes.
     """
 
     header_lines = []
@@ -44,15 +121,18 @@ def read_genes(gtf_path):
 
         for line in fin:
 
+            # Preserve GTF headers/comments
             if line.startswith("#"):
                 header_lines.append(line)
                 continue
 
             cols = line.rstrip("\n").split("\t")
 
+            # Skip malformed lines
             if len(cols) < 9:
                 continue
 
+            # Only gene features are used
             if cols[2] != "gene":
                 continue
 
@@ -82,27 +162,37 @@ def read_genes(gtf_path):
 
 
 # ------------------------------------------------------------
-# Generate intergenic features
+# Generate strand-aware extended features
 # ------------------------------------------------------------
 
 def generate_intergenic_features(genes, extension):
     """
-    Generate one intergenic feature per gene.
+    Generate one strand-aware extended feature per gene.
 
-    For '+' strand genes:
-        Extend upstream by up to <extension> bp without
-        crossing the previous gene.
+    Positive-strand genes:
+        Extend upstream by up to `extension` bp without
+        crossing the preceding annotated gene.
 
-    For '-' strand genes:
-        Extend downstream by up to <extension> bp without
-        crossing the next gene.
+    Negative-strand genes:
+        Extend downstream by up to `extension` bp without
+        crossing the following annotated gene.
 
-    Coordinates remain 1-based as required by GTF format.
+    The full annotated gene itself is retained.
+
+    Coordinates remain 1-based and inclusive as required by GTF.
     """
 
-    genes.sort(key=lambda x: (x[0], x[1]))
+    # Sort by chromosome and genomic position
+    genes = sorted(
+        genes,
+        key=lambda x: (x[0], x[1], x[2])
+    )
 
-    # Store the next gene start for each gene
+
+    # --------------------------------------------------------
+    # Determine next gene start for each record
+    # --------------------------------------------------------
+
     next_start = {}
 
     for chrom, group in groupby(
@@ -114,35 +204,36 @@ def generate_intergenic_features(genes, extension):
 
         for i, gene in enumerate(chromosome_genes):
 
-            (
-                _chrom,
-                _start,
-                _end,
-                _source,
-                _score,
-                _strand,
-                _frame,
-                attributes,
-            ) = gene
-
-            gene_id = parse_attrs(attributes).get(
-                "gene_id"
+            record_key = (
+                gene[0],
+                gene[1],
+                gene[2],
+                gene[5],
+                gene[7]
             )
 
-            if gene_id is None:
-                continue
-
             if i < len(chromosome_genes) - 1:
-                next_start[gene_id] = (
+
+                next_start[record_key] = (
                     chromosome_genes[i + 1][1]
                 )
-            else:
-                next_start[gene_id] = None
 
+            else:
+
+                next_start[record_key] = None
+
+
+    # --------------------------------------------------------
+    # Generate extended features
+    # --------------------------------------------------------
+
+    intergenic_features = []
 
     prev_end = {}
 
-    intergenic_features = []
+    positive_count = 0
+    negative_count = 0
+    skipped_count = 0
 
 
     for (
@@ -156,9 +247,16 @@ def generate_intergenic_features(genes, extension):
         attributes,
     ) in genes:
 
-        gene_id = parse_attrs(attributes).get(
+        attrs = parse_attrs(
+            attributes
+        )
+
+        gene_id = attrs.get(
             "gene_id",
-            "."
+            attrs.get(
+                "gene",
+                f"{chrom}:{start}-{end}"
+            )
         )
 
 
@@ -168,23 +266,28 @@ def generate_intergenic_features(genes, extension):
 
         if strand == "+":
 
-            intergenic_end = end
-
             previous_end = prev_end.get(
                 chrom,
                 0
             )
 
             intergenic_start = max(
-                previous_end + 1,
+                1,
                 start - extension,
-                1
+                previous_end + 1
             )
+
+            intergenic_end = end
+
 
             # If previous gene overlaps current gene,
             # do not extend upstream
             if previous_end >= start:
+
                 intergenic_start = start
+
+
+            positive_count += 1
 
 
         # ----------------------------------------------------
@@ -195,25 +298,43 @@ def generate_intergenic_features(genes, extension):
 
             intergenic_start = start
 
-            following_start = next_start.get(
-                gene_id
+            record_key = (
+                chrom,
+                start,
+                end,
+                strand,
+                attributes
             )
+
+            following_start = next_start.get(
+                record_key
+            )
+
 
             if following_start is None:
 
-                intergenic_end = end + extension
+                intergenic_end = (
+                    end + extension
+                )
 
             else:
 
-                gap = following_start - end - 1
+                gap = (
+                    following_start
+                    - end
+                    - 1
+                )
+
 
                 if gap <= 0:
 
-                    # Overlapping downstream gene
+                    # Next gene overlaps current gene
                     intergenic_end = end
 
                 elif gap <= extension:
 
+                    # Extend only until immediately before
+                    # the next gene
                     intergenic_end = (
                         following_start - 1
                     )
@@ -225,16 +346,18 @@ def generate_intergenic_features(genes, extension):
                     )
 
 
+            negative_count += 1
+
+
         # ----------------------------------------------------
-        # Unexpected strand value
+        # Unsupported strand
         # ----------------------------------------------------
 
         else:
 
             print(
-                f"WARNING: Skipping gene with "
-                f"unsupported strand '{strand}': "
-                f"{gene_id}"
+                f"WARNING: Skipping gene with unsupported "
+                f"strand '{strand}': {gene_id}"
             )
 
             prev_end[chrom] = max(
@@ -242,8 +365,20 @@ def generate_intergenic_features(genes, extension):
                 end
             )
 
+            skipped_count += 1
+
             continue
 
+
+        # ----------------------------------------------------
+        # Add intergenic feature
+        #
+        # Step 06 featureCounts uses:
+        #
+        #   -t intergenic
+        #
+        # therefore the feature type remains "intergenic".
+        # ----------------------------------------------------
 
         intergenic_features.append(
             [
@@ -260,18 +395,23 @@ def generate_intergenic_features(genes, extension):
         )
 
 
-        # Track furthest gene end on this chromosome
+        # Track furthest annotated gene end
         prev_end[chrom] = max(
             prev_end.get(chrom, 0),
             end
         )
 
 
-    return intergenic_features
+    return (
+        intergenic_features,
+        positive_count,
+        negative_count,
+        skipped_count
+    )
 
 
 # ------------------------------------------------------------
-# Write output GTF
+# Write GTF
 # ------------------------------------------------------------
 
 def write_gtf(
@@ -286,69 +426,138 @@ def write_gtf(
             fout.write(line)
 
         for feature in features:
+
             fout.write(
-                "\t".join(feature) + "\n"
+                "\t".join(feature)
+                + "\n"
             )
 
 
-# ------------------------------------------------------------
+# ============================================================
 # Main
-# ------------------------------------------------------------
+# ============================================================
 
 def main():
 
+    # --------------------------------------------------------
+    # Determine workflow root automatically
+    # --------------------------------------------------------
+
+    script_path = Path(
+        __file__
+    ).resolve()
+
+    workflow_dir = find_workflow_root(
+        script_path
+    )
+
+
+    # --------------------------------------------------------
+    # Default GCF reference paths
+    # --------------------------------------------------------
+
+    default_input_gtf = (
+        workflow_dir
+        / "gtf"
+        / "ncbi_dataset"
+        / "data"
+        / "GCF_000005845.2"
+        / "genomic.gtf"
+    )
+
+
+    default_output_gtf = (
+        workflow_dir
+        / "gtf"
+        / "GCF_000005845.2_genomic_intergenic.gtf"
+    )
+
+
+    # --------------------------------------------------------
+    # Arguments
+    # --------------------------------------------------------
+
     parser = argparse.ArgumentParser(
         description=(
-            "Generate strand-aware extended gene/intergenic "
-            "features from a reference GTF annotation for "
-            "HELIOS NAD-Seq analysis."
+            "Prepare a strand-aware extended E. coli GTF "
+            "annotation for HELIOS NAD-Seq featureCounts."
         )
     )
 
-    parser.add_argument(
-        "input_gtf",
-        help="Input reference GTF file."
-    )
 
     parser.add_argument(
-        "output_gtf",
-        help="Output intergenic GTF file."
+        "--input-gtf",
+        default=str(
+            default_input_gtf
+        ),
+        help=(
+            "Input reference GTF. "
+            "Default: <workflow>/gtf/ncbi_dataset/data/"
+            "GCF_000005845.2/genomic.gtf"
+        )
     )
+
+
+    parser.add_argument(
+        "--output-gtf",
+        default=str(
+            default_output_gtf
+        ),
+        help=(
+            "Output GTF containing extended 'intergenic' "
+            "features. Default: "
+            "<workflow>/gtf/"
+            "GCF_000005845.2_genomic_intergenic.gtf"
+        )
+    )
+
 
     parser.add_argument(
         "--extension",
         type=int,
         default=100,
         help=(
-            "Maximum number of bases to extend from the "
-            "gene boundary. Default: 100 bp."
+            "Maximum strand-aware extension from the biological "
+            "5' gene boundary. Default: 100 bp."
         )
     )
+
 
     args = parser.parse_args()
 
 
     # --------------------------------------------------------
-    # Validate arguments
+    # Resolve paths
     # --------------------------------------------------------
 
     input_gtf = Path(
         args.input_gtf
     ).expanduser().resolve()
 
+
     output_gtf = Path(
         args.output_gtf
     ).expanduser().resolve()
 
 
+    # --------------------------------------------------------
+    # Validate inputs
+    # --------------------------------------------------------
+
     if not input_gtf.is_file():
+
         raise FileNotFoundError(
-            f"Input GTF does not exist: "
-            f"{input_gtf}"
+            "Input GTF does not exist:\n"
+            f"{input_gtf}\n\n"
+            "Expected default location:\n"
+            f"{default_input_gtf}\n\n"
+            "You can also specify the file manually with:\n"
+            "--input-gtf /path/to/genomic.gtf"
         )
 
 
     if args.extension < 0:
+
         raise ValueError(
             "--extension must be >= 0"
         )
@@ -360,41 +569,36 @@ def main():
     )
 
 
+    # --------------------------------------------------------
+    # Print configuration
+    # --------------------------------------------------------
+
+    print("========================================")
+    print("HELIOS NAD-Seq reference preparation")
+    print("Generate extended intergenic GTF")
+    print("========================================")
+
     print(
-        "========================================"
+        f"Workflow directory: {workflow_dir}"
     )
 
     print(
-        "HELIOS NAD-Seq: Reference preparation"
+        f"Input GTF:          {input_gtf}"
     )
 
     print(
-        "Generate intergenic GTF"
+        f"Output GTF:         {output_gtf}"
     )
 
     print(
-        "========================================"
+        f"Extension:          {args.extension} bp"
     )
 
-    print(
-        f"Input GTF:     {input_gtf}"
-    )
-
-    print(
-        f"Output GTF:    {output_gtf}"
-    )
-
-    print(
-        f"Extension:     {args.extension} bp"
-    )
-
-    print(
-        "========================================"
-    )
+    print("========================================")
 
 
     # --------------------------------------------------------
-    # Read input
+    # Read GTF
     # --------------------------------------------------------
 
     header_lines, genes = read_genes(
@@ -403,9 +607,9 @@ def main():
 
 
     if not genes:
+
         raise RuntimeError(
-            "No gene features were found "
-            "in the input GTF."
+            "No 'gene' features were found in the input GTF."
         )
 
 
@@ -415,17 +619,22 @@ def main():
 
 
     # --------------------------------------------------------
-    # Generate intergenic annotation
+    # Generate intergenic features
     # --------------------------------------------------------
 
-    features = generate_intergenic_features(
+    (
+        features,
+        positive_count,
+        negative_count,
+        skipped_count
+    ) = generate_intergenic_features(
         genes,
         args.extension
     )
 
 
     # --------------------------------------------------------
-    # Write result
+    # Write output GTF
     # --------------------------------------------------------
 
     write_gtf(
@@ -435,24 +644,48 @@ def main():
     )
 
 
+    # --------------------------------------------------------
+    # Summary
+    # --------------------------------------------------------
+
+    print()
+
+    print("========================================")
+    print("Reference preparation completed.")
+    print("----------------------------------------")
+
     print(
-        f"Intergenic features written: "
-        f"{len(features)}"
+        f"Input gene features:     {len(genes)}"
     )
 
     print(
-        "========================================"
+        f"Positive-strand genes:   {positive_count}"
     )
 
     print(
-        "Reference preparation completed."
+        f"Negative-strand genes:   {negative_count}"
     )
 
     print(
-        "========================================"
+        f"Unsupported/skipped:     {skipped_count}"
     )
+
+    print(
+        f"Features written:        {len(features)}"
+    )
+
+    print()
+
+    print(
+        "Output GTF:"
+    )
+
+    print(
+        f"{output_gtf}"
+    )
+
+    print("========================================")
 
 
 if __name__ == "__main__":
     main()
-```
