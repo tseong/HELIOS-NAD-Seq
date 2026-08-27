@@ -1,4 +1,4 @@
-name: helios
+name: eColiHelios_2
 channels:
   - conda-forge
   - bioconda
@@ -28,7 +28,12 @@ dependencies:
   - matplotlib-venn
   - upsetplot
   - sra-tools
+  - notebook
+  - ipykernel
+  - entrez-direct
+  - libnsl
   - pip:
       - pydeseq2==0.4.10
       - venn
       - gseapy
+
