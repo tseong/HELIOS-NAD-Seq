@@ -87,7 +87,6 @@ if [ "${#forward_reads[@]}" -ne "${#reverse_reads[@]}" ]; then
     exit 1
 fi
 
-
 i=0
 
 for forward_read in "${forward_reads[@]}"; do
@@ -95,10 +94,45 @@ for forward_read in "${forward_reads[@]}"; do
     # Define paired reads
     paired_read=("${forward_reads[$i]}" "${reverse_reads[$i]}")
 
-    echo "Processing pair:"
+    R1_base="$(basename "${paired_read[0]}")"
+    R2_base="$(basename "${paired_read[1]}")"
+
+    echo "========================================"
+    echo "Checking pair:"
     echo "  R1: ${paired_read[0]}"
     echo "  R2: ${paired_read[1]}"
 
+    # --------------------------------------------------------
+    # Check whether all expected barcode outputs already exist
+    # --------------------------------------------------------
+
+    all_outputs_exist=true
+
+    for bc in bc01 bc02 bc03 bc04 bc05 bc06 bc07 bc08; do
+
+        # Note: R2 is primary input (-o), R1 is paired input (-p)
+        output_R2="$end_dir/${bc}_${R2_base}"
+        output_R1="$end_dir/${bc}_${R1_base}"
+
+        if [[ ! -s "$output_R1" || ! -s "$output_R2" ]]; then
+            all_outputs_exist=false
+            break
+        fi
+
+    done
+
+    if [[ "$all_outputs_exist" == true ]]; then
+
+        echo "All bc01-bc08 output files already exist."
+        echo "Skipping this FASTQ pair."
+
+        i=$((i+1))
+        continue
+
+    fi
+
+    echo "Output incomplete or not found."
+    echo "Running Cutadapt..."
 
     cutadapt \
         -j 0 \
@@ -135,12 +169,9 @@ for forward_read in "${forward_reads[@]}"; do
         -A CNNNNNNNACAGCA \
         -A CNNNNNNNACCATA \
         -A CNNNNNNNACATAG \
-        -o "$end_dir/{name}_$(basename "${paired_read[1]}")" \
-        -p "$end_dir/{name}_$(basename "${paired_read[0]}")" \
+        -o "$end_dir/{name}_${R2_base}" \
+        -p "$end_dir/{name}_${R1_base}" \
         "${paired_read[1]}" "${paired_read[0]}"
-
-    # Demultiplexing is performed using R2 as the primary read because
-    # Cutadapt demultiplexing via {name} is applied to the primary input.
 
     i=$((i+1))
 
