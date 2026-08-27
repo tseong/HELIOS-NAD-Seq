@@ -29,9 +29,9 @@ The environment file (`envs/helios.yml`) will install:
   - matplotlib
   - pandas
   - numpy
-  - scipy                  # for z-score & other stats
-  - scikit-learn           # KMeans, z-scoring utilities
-  - tslearn                # dynamic time warping clustering
+  - scipy             
+  - scikit-learn          
+  - tslearn              
   - gffutils
   - biopython
   - pip
@@ -39,9 +39,16 @@ The environment file (`envs/helios.yml`) will install:
   - weblogo
   - seaborn
   - matplotlib-venn
+  - upsetplot
+  - sra-tools
+  - notebook
+  - ipykernel
+  - entrez-direct
+  - libnsl
   - pip:
       - pydeseq2==0.4.10
       - venn
+      - gseapy
 
 
 ---
