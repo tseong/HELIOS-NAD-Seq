@@ -202,8 +202,8 @@ def main():
     for forward_file in all_forward_files:
 
         reverse_file = forward_file.replace(
-            "R1_001.fastq",
-            "R2_001.fastq"
+            "R1.fastq",
+            "R2.fastq"
         )
 
         if reverse_file in all_reverse_files:
@@ -234,15 +234,15 @@ def main():
         forward_basename = os.path.basename(
             files["forward"]
         ).replace(
-            "R1_001.fastq",
-            "R1_001_trimmed.fastq"
+            "R1.fastq",
+            "R1_trimmed.fastq"
         )
 
         reverse_basename = os.path.basename(
             files["reverse"]
         ).replace(
-            "R2_001.fastq",
-            "R2_001_trimmed.fastq"
+            "R2.fastq",
+            "R2_trimmed.fastq"
         )
 
         output_files[name] = {
