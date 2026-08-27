@@ -56,13 +56,13 @@ echo "========================================"
 # Run 5' trimming
 if [ -n "$output_dir" ]; then
 
-    python scripts/02.5prime_trim.py \
+    python 02.5prime_trim.py \
         "$input_dir" \
         "$output_dir"
 
 else
 
-    python scripts/02.5prime_trim.py \
+    python 02.5prime_trim.py \
         "$input_dir"
 
 fi
